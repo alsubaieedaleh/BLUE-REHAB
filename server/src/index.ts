@@ -1,0 +1,14 @@
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import {z} from 'zod';
+import {config} from './config.js';
+import {admin} from './supabase.js';
+const app=express();
+app.use(helmet());app.use(cors({origin:config.CLIENT_URL}));app.use(express.json({limit:'2mb'}));
+app.get('/api/health',(_req,res)=>res.json({status:'ok',service:'blue-rehab-api',database:admin?'connected':'not-configured'}));
+app.get('/api/specialists',async(_req,res,next)=>{try{if(!admin)return res.json({data:[],demo:true});const{data,error}=await admin.from('specialists').select('*, profiles(full_name,avatar_url)').eq('is_verified',true);if(error)throw error;res.json({data});}catch(e){next(e)}});
+const bookingSchema=z.object({specialistId:z.string().uuid(),serviceId:z.string().uuid(),startsAt:z.string().datetime(),mode:z.enum(['remote','clinic']),branchId:z.string().uuid().optional()});
+app.post('/api/bookings',async(req,res,next)=>{try{const body=bookingSchema.parse(req.body);if(!admin)return res.status(503).json({error:'Supabase is not configured'});const token=req.headers.authorization?.replace('Bearer ','');if(!token)return res.status(401).json({error:'Authentication required'});const{data:userData,error:userError}=await admin.auth.getUser(token);if(userError||!userData.user)return res.status(401).json({error:'Invalid session'});const{data,error}=await admin.from('bookings').insert({patient_id:userData.user.id,specialist_id:body.specialistId,service_id:body.serviceId,starts_at:body.startsAt,mode:body.mode,branch_id:body.branchId,status:'pending_payment'}).select().single();if(error)throw error;res.status(201).json({data});}catch(e){next(e)}});
+app.use((err:unknown,_req:express.Request,res:express.Response,_next:express.NextFunction)=>{console.error(err);if(err instanceof z.ZodError)return res.status(400).json({error:'Invalid request',details:err.issues});res.status(500).json({error:'Unexpected server error'})});
+app.listen(config.PORT,()=>console.log(`Blue Rehab API running on http://localhost:${config.PORT}`));
