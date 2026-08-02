@@ -1,12 +1,15 @@
 import { z } from "zod";
 import { previewCatalog, previewCourseDetail } from "./catalog.js";
-import { admin, catalog } from "./supabase.js";
+import { authenticatedClient, catalog } from "./supabase.js";
 
 export type ApiResult = {
   status: number;
   body: unknown;
   cacheControl?: string;
 };
+
+const publicCache = "public, max-age=30, s-maxage=120";
+const noStore = "no-store";
 
 const bookingDraftSchema = z.object({
   serviceId: z.string().uuid(),
@@ -22,33 +25,51 @@ export function getHealth(): ApiResult {
     body: {
       status: "ok",
       service: "blue-rehab-api",
-      catalog: catalog ? "supabase" : "preview",
-      protectedWrites: admin ? "configured" : "disabled",
+      catalog: "supabase",
+      protectedWrites: "authenticated-rls",
     },
-    cacheControl: "no-store",
+    cacheControl: noStore,
   };
 }
 
 export async function getCatalog(): Promise<ApiResult> {
-  if (!catalog) {
-    return { status: 200, body: previewCatalog(), cacheControl: "public, max-age=30, s-maxage=120" };
-  }
-
   const [servicesResult, specialistsResult, coursesResult, branchesResult, slotsResult] = await Promise.all([
-    catalog.from("services").select("id,name,description,duration_minutes,price,allowed_modes,is_demo").eq("is_active", true).order("price"),
-    catalog.from("specialists").select("id,display_name,title,bio,specialties,languages,is_verified,is_demo").order("created_at"),
-    catalog.from("courses").select("id,slug,title,summary,description,duration_hours,price,mode,level,starts_at,learning_outcomes,prerequisites,language,certificate_available,is_demo").eq("is_published", true).order("starts_at"),
-    catalog.from("branches").select("id,name,city,address,is_demo").eq("is_active", true).order("name"),
-    catalog.from("availability_slots").select("id,specialist_id,branch_id,starts_at,ends_at,mode").eq("is_available", true).gt("starts_at", new Date().toISOString()).order("starts_at").limit(12),
+    catalog
+      .from("services")
+      .select("id,name,description,duration_minutes,price,allowed_modes,is_demo")
+      .eq("is_active", true)
+      .order("price"),
+    catalog
+      .from("specialists")
+      .select("id,display_name,title,bio,specialties,languages,is_verified,is_demo")
+      .order("created_at"),
+    catalog
+      .from("courses")
+      .select("id,slug,title,summary,description,duration_hours,price,mode,level,starts_at,learning_outcomes,prerequisites,language,certificate_available,is_demo")
+      .eq("is_published", true)
+      .order("starts_at"),
+    catalog
+      .from("branches")
+      .select("id,name,city,address,is_demo")
+      .eq("is_active", true)
+      .order("name"),
+    catalog
+      .from("availability_slots")
+      .select("id,specialist_id,branch_id,starts_at,ends_at,mode")
+      .eq("is_available", true)
+      .gt("starts_at", new Date().toISOString())
+      .order("starts_at")
+      .limit(12),
   ]);
 
   const error = [servicesResult, specialistsResult, coursesResult, branchesResult, slotsResult]
     .find((result) => result.error)?.error;
+
   if (error) throw error;
 
   return {
     status: 200,
-    cacheControl: "public, max-age=30, s-maxage=120",
+    cacheControl: publicCache,
     body: {
       source: "supabase",
       services: (servicesResult.data ?? []).map((row) => ({
@@ -108,9 +129,6 @@ export async function getCatalog(): Promise<ApiResult> {
 
 export async function getCourseDetail(rawSlug: string): Promise<ApiResult> {
   const slug = z.string().min(2).max(160).parse(rawSlug);
-  if (!catalog) {
-    return { status: 200, body: previewCourseDetail(slug), cacheControl: "public, max-age=30, s-maxage=120" };
-  }
 
   const courseResult = await catalog
     .from("courses")
@@ -120,13 +138,17 @@ export async function getCourseDetail(rawSlug: string): Promise<ApiResult> {
     .maybeSingle();
 
   if (courseResult.error) throw courseResult.error;
-  if (!courseResult.data) return { status: 404, body: { error: "Course not found" }, cacheControl: "no-store" };
+  if (!courseResult.data) {
+    const preview = previewCourseDetail(slug);
+    return { status: 404, body: { error: "Course not found", preview }, cacheControl: noStore };
+  }
 
   const modulesResult = await catalog
     .from("course_modules")
     .select("id,title,summary,position")
     .eq("course_id", courseResult.data.id)
     .order("position");
+
   if (modulesResult.error) throw modulesResult.error;
 
   const moduleIds = (modulesResult.data ?? []).map((module) => module.id);
@@ -137,12 +159,13 @@ export async function getCourseDetail(rawSlug: string): Promise<ApiResult> {
         .in("module_id", moduleIds)
         .order("position")
     : { data: [], error: null };
+
   if (lessonsResult.error) throw lessonsResult.error;
 
   const row = courseResult.data;
   return {
     status: 200,
-    cacheControl: "public, max-age=30, s-maxage=120",
+    cacheControl: publicCache,
     body: {
       source: "supabase",
       course: {
@@ -181,27 +204,29 @@ export async function getCourseDetail(rawSlug: string): Promise<ApiResult> {
   };
 }
 
-export async function createBookingDraft(authorization: string | null, payload: unknown): Promise<ApiResult> {
-  if (!admin) {
-    return { status: 503, body: { error: "Protected Supabase writes are not configured" }, cacheControl: "no-store" };
+export async function createBookingDraft(
+  authorization: string | null,
+  payload: unknown,
+): Promise<ApiResult> {
+  const token = authorization?.replace(/^Bearer\s+/i, "");
+  if (!token) {
+    return { status: 401, body: { error: "Authentication required" }, cacheControl: noStore };
   }
 
-  const token = authorization?.replace(/^Bearer\s+/i, "");
-  if (!token) return { status: 401, body: { error: "Authentication required" }, cacheControl: "no-store" };
-
-  const { data: userData, error: userError } = await admin.auth.getUser(token);
+  const userClient = authenticatedClient(token);
+  const { data: userData, error: userError } = await userClient.auth.getUser(token);
   if (userError || !userData.user) {
-    return { status: 401, body: { error: "Invalid session" }, cacheControl: "no-store" };
+    return { status: 401, body: { error: "Invalid session" }, cacheControl: noStore };
   }
 
   const body = bookingDraftSchema.parse(payload);
   const [{ data: slot, error: slotError }, { data: service, error: serviceError }] = await Promise.all([
-    admin
+    userClient
       .from("availability_slots")
       .select("id,specialist_id,branch_id,starts_at,ends_at,mode,is_available")
       .eq("id", body.slotId)
       .single(),
-    admin
+    userClient
       .from("services")
       .select("id,price,is_active,allowed_modes")
       .eq("id", body.serviceId)
@@ -209,7 +234,7 @@ export async function createBookingDraft(authorization: string | null, payload: 
   ]);
 
   if (slotError || serviceError || !slot || !service) {
-    return { status: 409, body: { error: "Service or slot is unavailable" }, cacheControl: "no-store" };
+    return { status: 409, body: { error: "Service or slot is unavailable" }, cacheControl: noStore };
   }
 
   if (
@@ -219,10 +244,14 @@ export async function createBookingDraft(authorization: string | null, payload: 
     !service.is_active ||
     !service.allowed_modes.includes(body.mode)
   ) {
-    return { status: 409, body: { error: "Booking selection is no longer available" }, cacheControl: "no-store" };
+    return {
+      status: 409,
+      body: { error: "Booking selection is no longer available" },
+      cacheControl: noStore,
+    };
   }
 
-  const { data, error } = await admin
+  const { data, error } = await userClient
     .from("bookings")
     .insert({
       patient_id: userData.user.id,
@@ -241,18 +270,20 @@ export async function createBookingDraft(authorization: string | null, payload: 
     .single();
 
   if (error) throw error;
-  return { status: 201, body: { data, next: "payment" }, cacheControl: "no-store" };
+  return { status: 201, body: { data, next: "payment" }, cacheControl: noStore };
 }
 
 export function apiErrorResult(error: unknown): ApiResult {
   if (error instanceof z.ZodError) {
     return {
       status: 400,
-      body: { error: "Invalid request", details: (error as { issues: unknown }).issues },
-      cacheControl: "no-store",
+      body: { error: "Invalid request", details: error.issues },
+      cacheControl: noStore,
     };
   }
 
   console.error(error);
-  return { status: 500, body: { error: "Unexpected server error" }, cacheControl: "no-store" };
+  return { status: 500, body: { error: "Unexpected server error" }, cacheControl: noStore };
 }
+
+export { previewCatalog };

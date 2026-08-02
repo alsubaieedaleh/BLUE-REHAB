@@ -8,7 +8,7 @@ import {
   getCourseDetail,
   getHealth,
   type ApiResult,
-} from "./api.js";
+} from "./api-v2.js";
 import { config } from "./config.js";
 
 const app = express();

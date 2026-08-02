@@ -5,7 +5,7 @@ import {
   getCourseDetail,
   getHealth,
   type ApiResult,
-} from "../../server/src/api.js";
+} from "../../server/src/api-v2.js";
 
 const FUNCTION_PREFIX = "/.netlify/functions/api";
 const API_PREFIX = "/api";
@@ -24,6 +24,7 @@ function routePath(request: Request) {
 
 function corsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get("origin");
+  const requestOrigin = new URL(request.url).origin;
   const allowedOrigins = (process.env.CLIENT_URL ?? "")
     .split(",")
     .map((value) => value.trim().replace(/\/$/, ""))
@@ -35,7 +36,7 @@ function corsHeaders(request: Request): Record<string, string> {
     Vary: "Origin",
   };
 
-  if (origin && allowedOrigins.includes(origin.replace(/\/$/, ""))) {
+  if (origin && (origin === requestOrigin || allowedOrigins.includes(origin.replace(/\/$/, "")))) {
     headers["Access-Control-Allow-Origin"] = origin;
   }
 
