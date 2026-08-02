@@ -1,46 +1,23 @@
-import { createClient } from "@supabase/supabase-js";
+import { z } from "zod";
+import { authenticatedClient, catalog } from "./supabase.js";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || "https://lfuuptigzjocgewhrmkt.supabase.co";
-const SUPABASE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || "sb_publishable_578u_Ab3cgUlqcXhFiidnQ_MnoAEf9l";
-const catalog = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+export type ApiResult = { status: number; body: unknown; cacheControl?: string };
+const publicCache = "public, max-age=30, s-maxage=120";
+const noStore = "no-store";
 
-const FUNCTION_PREFIX = "/.netlify/functions/api";
-const API_PREFIX = "/api";
+const bookingSchema = z.object({
+  serviceId: z.string().uuid(),
+  specialistId: z.string().uuid(),
+  slotId: z.string().uuid(),
+  mode: z.enum(["remote", "clinic"]),
+  notes: z.string().max(800).optional(),
+});
 
-type Result = { status: number; body: unknown; cacheControl?: string };
-
-function routePath(request: Request) {
-  const pathname = new URL(request.url).pathname;
-  const withoutFunctionPrefix = pathname.startsWith(FUNCTION_PREFIX) ? pathname.slice(FUNCTION_PREFIX.length) : pathname;
-  const withoutApiPrefix = withoutFunctionPrefix.startsWith(API_PREFIX) ? withoutFunctionPrefix.slice(API_PREFIX.length) : withoutFunctionPrefix;
-  const normalized = withoutApiPrefix || "/";
-  return normalized.length > 1 ? normalized.replace(/\/$/, "") : normalized;
+export function getHealth(): ApiResult {
+  return { status: 200, body: { status: "ok", service: "blue-rehab-api", catalog: "supabase", protectedWrites: "authenticated-rls" }, cacheControl: noStore };
 }
 
-function corsHeaders(request: Request): Record<string, string> {
-  const origin = request.headers.get("origin");
-  const requestOrigin = new URL(request.url).origin;
-  const headers: Record<string, string> = {
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    Vary: "Origin",
-  };
-  if (origin && origin === requestOrigin) headers["Access-Control-Allow-Origin"] = origin;
-  return headers;
-}
-
-function json(request: Request, result: Result) {
-  return new Response(JSON.stringify(result.body), {
-    status: result.status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": result.cacheControl ?? "no-store",
-      ...corsHeaders(request),
-    },
-  });
-}
-
-async function getCatalog(): Promise<Result> {
+export async function getCatalog(): Promise<ApiResult> {
   const now = new Date().toISOString();
   const [servicesResult, specialistsResult, coursesResult, branchesResult, slotsResult] = await Promise.all([
     catalog.from("services").select("id,name,description,duration_minutes,price,allowed_modes,is_demo").eq("is_active", true).order("price"),
@@ -53,7 +30,7 @@ async function getCatalog(): Promise<Result> {
   if (error) throw error;
   return {
     status: 200,
-    cacheControl: "public, max-age=30, s-maxage=120",
+    cacheControl: publicCache,
     body: {
       source: "supabase",
       services: (servicesResult.data ?? []).map((row) => ({ id: row.id, name: row.name, description: row.description ?? "", durationMinutes: Number(row.duration_minutes), price: Number(row.price), modes: row.allowed_modes, isDemo: row.is_demo })),
@@ -65,10 +42,11 @@ async function getCatalog(): Promise<Result> {
   };
 }
 
-async function getCourse(slug: string): Promise<Result> {
+export async function getCourseDetail(slugValue: string): Promise<ApiResult> {
+  const slug = z.string().min(2).max(160).parse(slugValue);
   const courseResult = await catalog.from("courses").select("id,slug,title,summary,description,duration_hours,price,mode,level,starts_at,learning_outcomes,prerequisites,language,certificate_available,is_demo").eq("slug", slug).eq("is_published", true).maybeSingle();
   if (courseResult.error) throw courseResult.error;
-  if (!courseResult.data) return { status: 404, body: { error: "Course not found" } };
+  if (!courseResult.data) return { status: 404, body: { error: "Course not found" }, cacheControl: noStore };
   const modulesResult = await catalog.from("course_modules").select("id,title,description,sort_order").eq("course_id", courseResult.data.id).order("sort_order");
   if (modulesResult.error) throw modulesResult.error;
   const moduleIds = (modulesResult.data ?? []).map((module) => module.id);
@@ -77,7 +55,7 @@ async function getCourse(slug: string): Promise<Result> {
   const row = courseResult.data;
   return {
     status: 200,
-    cacheControl: "public, max-age=30, s-maxage=120",
+    cacheControl: publicCache,
     body: {
       source: "supabase",
       course: { id: row.id, slug: row.slug, title: row.title, summary: row.summary ?? "", description: row.description ?? "", durationHours: Number(row.duration_hours), price: Number(row.price), mode: row.mode, level: row.level, startsAt: row.starts_at, learningOutcomes: row.learning_outcomes, prerequisites: row.prerequisites, language: row.language, certificateAvailable: row.certificate_available, isDemo: row.is_demo },
@@ -86,36 +64,25 @@ async function getCourse(slug: string): Promise<Result> {
   };
 }
 
-async function createBooking(request: Request): Promise<Result> {
-  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!token) return { status: 401, body: { error: "Authentication required" } };
-  const body = await request.json() as { serviceId?: string; specialistId?: string; slotId?: string; mode?: string; notes?: string };
-  if (!body.serviceId || !body.specialistId || !body.slotId || !body.mode) return { status: 400, body: { error: "Invalid request" } };
-  const client = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
+export async function createBookingDraft(authorization: string | null, payload: unknown): Promise<ApiResult> {
+  const token = authorization?.replace(/^Bearer\s+/i, "");
+  if (!token) return { status: 401, body: { error: "Authentication required" }, cacheControl: noStore };
+  const body = bookingSchema.parse(payload);
+  const client = authenticatedClient(token);
   const { data: userData, error: userError } = await client.auth.getUser(token);
-  if (userError || !userData.user) return { status: 401, body: { error: "Invalid session" } };
+  if (userError || !userData.user) return { status: 401, body: { error: "Invalid session" }, cacheControl: noStore };
   const [{ data: slot, error: slotError }, { data: service, error: serviceError }] = await Promise.all([
     client.from("availability_slots").select("id,specialist_id,branch_id,starts_at,ends_at,mode,is_available").eq("id", body.slotId).single(),
     client.from("services").select("id,price,is_active,allowed_modes").eq("id", body.serviceId).single(),
   ]);
-  if (slotError || serviceError || !slot || !service) return { status: 409, body: { error: "Service or slot is unavailable" } };
+  if (slotError || serviceError || !slot || !service) return { status: 409, body: { error: "Service or slot is unavailable" }, cacheControl: noStore };
   const { data, error } = await client.from("bookings").insert({ patient_id: userData.user.id, specialist_id: body.specialistId, service_id: body.serviceId, slot_id: body.slotId, branch_id: slot.branch_id, starts_at: slot.starts_at, ends_at: slot.ends_at, mode: body.mode, status: "draft", total: service.price, notes: body.notes ?? null }).select("id,status,starts_at,total").single();
   if (error) throw error;
-  return { status: 201, body: { data, next: "payment" } };
+  return { status: 201, body: { data, next: "payment" }, cacheControl: noStore };
 }
 
-export default async function handler(request: Request) {
-  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(request) });
-  const path = routePath(request);
-  try {
-    if (request.method === "GET" && path === "/health") return json(request, { status: 200, body: { status: "ok", service: "blue-rehab-api", catalog: "supabase", protectedWrites: "authenticated-rls" } });
-    if (request.method === "GET" && path === "/catalog") return json(request, await getCatalog());
-    const courseMatch = path.match(/^\/courses\/([^/]+)$/);
-    if (request.method === "GET" && courseMatch) return json(request, await getCourse(decodeURIComponent(courseMatch[1])));
-    if (request.method === "POST" && path === "/bookings/drafts") return json(request, await createBooking(request));
-    return json(request, { status: 404, body: { error: "Route not found" } });
-  } catch (error) {
-    console.error(error);
-    return json(request, { status: 500, body: { error: "Unexpected server error" } });
-  }
+export function apiErrorResult(error: unknown): ApiResult {
+  if (error instanceof z.ZodError) return { status: 400, body: { error: "Invalid request", details: error.issues }, cacheControl: noStore };
+  console.error(error);
+  return { status: 500, body: { error: "Unexpected server error" }, cacheControl: noStore };
 }

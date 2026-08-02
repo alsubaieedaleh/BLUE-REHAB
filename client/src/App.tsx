@@ -1,8 +1,8 @@
 import { Route, Routes, useParams, useSearchParams } from "react-router-dom";
-import BookingFlow from "./components/BookingFlow";
-import CourseDetail from "./components/CourseDetail";
+import BookingFlowConnected from "./components/BookingFlowConnected";
+import ConnectedPortal from "./components/ConnectedPortal";
+import CourseDetailConnected from "./components/CourseDetailConnected";
 import PageShell from "./components/PageShell";
-import PortalExperience from "./components/PortalExperience";
 import AboutPage from "./pages/AboutPage";
 import AuthPage from "./pages/AuthPage";
 import ContactPage from "./pages/ContactPage";
@@ -17,20 +17,12 @@ import TermsPage from "./pages/TermsPage";
 
 function BookingPage() {
   const [params] = useSearchParams();
-  return <PageShell><section className="booking-page"><div className="container"><header className="booking-page-head"><span className="eyebrow">مسار حجز متصل</span><h1>حجز جلسة علاج طبيعي</h1><p>اختر الخدمة وطريقة التقديم والمختص والموعد، ثم سجّل الدخول لإرسال الطلب الآمن.</p></header><BookingFlow initialService={params.get("service") ?? undefined} initialSpecialist={params.get("specialist") ?? undefined} /></div></section></PageShell>;
+  return <PageShell><section className="booking-page"><div className="container"><header className="booking-page-head"><span className="eyebrow">حجز متصل بقاعدة البيانات</span><h1>حجز جلسة علاج طبيعي</h1><p>اختر الخدمة والمختص والموعد، ثم سجّل الدخول لإنشاء الحجز وحفظه في حسابك.</p></header><BookingFlowConnected initialService={params.get("service") ?? undefined} initialSpecialist={params.get("specialist") ?? undefined} /></div></section></PageShell>;
 }
 
 function CoursePage() {
   const { slug = "advanced-knee-rehab" } = useParams();
-  return <PageShell><CourseDetail slug={slug} /></PageShell>;
-}
-
-function PortalPage() {
-  const [params] = useSearchParams();
-  const requested = params.get("view");
-  const allowed = new Set(["patient", "student", "specialist", "trainer", "admin"]);
-  const initialView = allowed.has(requested ?? "") ? requested as "patient" | "student" | "specialist" | "trainer" | "admin" : "patient";
-  return <PortalExperience displayName="المستخدم" initialView={initialView} />;
+  return <PageShell><CourseDetailConnected slug={slug} /></PageShell>;
 }
 
 function NotFoundPage() {
@@ -46,7 +38,7 @@ export default function App() {
     <Route path="/courses" element={<CoursesPage />} />
     <Route path="/courses/:slug" element={<CoursePage />} />
     <Route path="/booking" element={<BookingPage />} />
-    <Route path="/portal" element={<PortalPage />} />
+    <Route path="/portal" element={<ConnectedPortal />} />
     <Route path="/about" element={<AboutPage />} />
     <Route path="/faq" element={<FaqPage />} />
     <Route path="/contact" element={<ContactPage />} />

@@ -8,7 +8,7 @@ import {
   getCourseDetail,
   getHealth,
   type ApiResult,
-} from "./api-v2.js";
+} from "./runtime-api.js";
 import { config } from "./config.js";
 
 const app = express();
@@ -23,37 +23,9 @@ function sendResult(response: express.Response, result: ApiResult) {
 }
 
 app.get("/api/health", (_request, response) => sendResult(response, getHealth()));
-
-app.get("/api/catalog", async (_request, response, next) => {
-  try {
-    return sendResult(response, await getCatalog());
-  } catch (error) {
-    return next(error);
-  }
-});
-
-app.get("/api/courses/:slug", async (request, response, next) => {
-  try {
-    return sendResult(response, await getCourseDetail(request.params.slug));
-  } catch (error) {
-    return next(error);
-  }
-});
-
-app.post("/api/bookings/drafts", async (request, response, next) => {
-  try {
-    return sendResult(
-      response,
-      await createBookingDraft(request.headers.authorization ?? null, request.body),
-    );
-  } catch (error) {
-    return next(error);
-  }
-});
-
+app.get("/api/catalog", async (_request, response, next) => { try { return sendResult(response, await getCatalog()); } catch (error) { return next(error); } });
+app.get("/api/courses/:slug", async (request, response, next) => { try { return sendResult(response, await getCourseDetail(request.params.slug)); } catch (error) { return next(error); } });
+app.post("/api/bookings/drafts", async (request, response, next) => { try { return sendResult(response, await createBookingDraft(request.headers.authorization ?? null, request.body)); } catch (error) { return next(error); } });
 app.use((_request, response) => response.status(404).json({ error: "Route not found" }));
-app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) =>
-  sendResult(response, apiErrorResult(error)),
-);
-
+app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => sendResult(response, apiErrorResult(error)));
 app.listen(config.PORT, () => console.log(`Blue Rehab API listening on port ${config.PORT}`));
