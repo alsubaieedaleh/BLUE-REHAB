@@ -54,6 +54,38 @@ SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
 
 لا تضع `SUPABASE_SERVICE_ROLE_KEY` في React أو في أي متغير يبدأ بـ`VITE_`.
 
+## النشر على Netlify
+
+يحتوي المشروع على `netlify.toml` جاهز للنشر من جذر المستودع:
+
+- Build command: `npm run build`
+- Publish directory: `client/dist`
+- Functions directory: `netlify/functions`
+- Node.js: الإصدار 20
+
+يعيد Netlify توجيه `/api/*` إلى Netlify Function، ثم يعيد باقي المسارات إلى `index.html` حتى تعمل مسارات React المباشرة مثل `/services` و`/courses/:slug` بعد التحديث أو فتح الرابط مباشرة.
+
+أضف متغيرات البيئة التالية من **Netlify → Project configuration → Environment variables**:
+
+```dotenv
+VITE_API_URL=/api
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY
+
+CLIENT_URL=https://YOUR_SITE.netlify.app
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
+```
+
+بعد النشر تحقق من:
+
+- `/services` للتأكد من عمل React Router.
+- `/api/health` للتأكد من تشغيل Function.
+- `/api/catalog` للتأكد من اتصال Supabase.
+
+يجب أن يعرض `/api/health` القيمة `protectedWrites: "configured"`. ظهور `disabled` يعني أن `SUPABASE_SERVICE_ROLE_KEY` غير مضبوط في بيئة Netlify.
+
 ## إعداد Supabase
 
 نفذ ملفات `supabase/migrations` بالترتيب على مشروع جديد. قاعدة الإنتاج الحالية تحتوي على 33 جدولاً عاماً مع RLS، وتشمل الحجوزات والجلسات والخطط والتمارين والدورات والمدفوعات والاستردادات والإشعارات والدعم والتدقيق.
@@ -72,12 +104,9 @@ npm run lint
 npm run build
 ```
 
-يشغّل GitHub Actions الأمرين آلياً لكل Pull Request ولكل Push إلى `main`.
+يشغّل GitHub Actions الأمرين آلياً لكل Pull Request ولكل Push إلى `main`. ويتضمن الفحص الآن ملفات Netlify Functions أيضاً.
 
 ## حدود التشغيل الحالية
 
 - يلزم اختيار بوابة الدفع وتطبيق Checkout وWebhook موثق.
 - يلزم اعتماد مزود الاجتماعات المرئية.
-- لوحات المستخدمين ما زالت تحتوي أجزاء عرض توضيحية تحتاج ربطاً باستعلامات الحساب.
-- يلزم إضافة بيانات الجهة المالكة والفروع والدعم والأخصائيين الحقيقيين.
-- يلزم اعتماد النصوص الطبية والقانونية وسياسة الاحتفاظ قبل استقبال بيانات مرضى فعلية.
