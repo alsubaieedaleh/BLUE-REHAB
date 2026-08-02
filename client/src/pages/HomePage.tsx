@@ -1,7 +1,6 @@
 import { ArrowLeft, BookOpenCheck, CalendarDays, CheckCircle2, Clock3, HeartHandshake, MapPin, MessageCircle, ShieldCheck, Stethoscope, Video } from "lucide-react";
 import { HomeCatalog } from "../components/CatalogSections";
 import PageShell from "../components/PageShell";
-import ProfessionalRehabEmoji from "../components/ProfessionalRehabEmoji";
 
 const careReasons = [
   { icon: CalendarDays, title: "موعد يناسب يومك", text: "اختر الموعد وطريقة الجلسة دون اتصالات متكررة." },
@@ -27,10 +26,8 @@ export default function HomePage() {
             <span><ShieldCheck /> بيانات محمية</span>
           </div>
         </div>
-        <div className="training-emoji-hero">
-          <div className="training-visual-shell">
-            <ProfessionalRehabEmoji />
-          </div>
+        <div className="rehab-photo-hero" role="img" aria-label="صالة تدريب وتأهيل حديثة ومنظمة وخالية من الأشخاص">
+          <div className="rehab-photo-shade" aria-hidden="true" />
           <div className="appointment-note"><Clock3 /><span><small>الحجز يستغرق دقائق</small><strong>اختر الخدمة والموعد المناسب</strong></span></div>
         </div>
       </div>
