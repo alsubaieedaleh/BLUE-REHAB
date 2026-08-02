@@ -6,9 +6,9 @@ import { supabase } from "../lib/supabase";
 
 export function Brand() {
   return (
-    <a className="brand" href="/" aria-label="بلو ريهاب — الرئيسية">
+    <a className="brand" href="/" aria-label="تأهيل بلو — الرئيسية">
       <span className="brand-mark" aria-hidden="true"><HeartPulse /></span>
-      <span className="brand-copy"><strong>بلو <b>ريهاب</b></strong><small>علاج طبيعي وتأهيل مهني</small></span>
+      <span className="brand-copy"><strong>تأهيل <b>بلو</b></strong><small>علاج طبيعي وتأهيل مهني</small></span>
     </a>
   );
 }
