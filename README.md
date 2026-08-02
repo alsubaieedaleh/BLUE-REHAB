@@ -1,15 +1,29 @@
-# Blue Rehab
+# Blue Rehab — بلو ريهاب
 
-منصة عربية متجاوبة للعلاج الطبيعي والدورات التأهيلية.
+منصة عربية متجاوبة لإدارة جلسات العلاج الطبيعي والخطط المنزلية، إلى جانب الدورات التأهيلية لطلاب وممارسي العلاج الطبيعي.
 
-## Stack
+النسخة المنشورة: [blue-rehab.dalh072.chatgpt.site](https://blue-rehab.dalh072.chatgpt.site)
 
-- React 19 + Vite + TypeScript
-- Node.js + Express + TypeScript
-- Supabase (PostgreSQL, Auth, Storage)
-- Plain CSS design system with full RTL support
+## التقنية
 
-## Run locally
+- React 19 + Vite + TypeScript، دون Next.js.
+- Node.js + Express + TypeScript للخدمات الخلفية.
+- Supabase فقط لقاعدة PostgreSQL والمصادقة والتخزين.
+- CSS عربي مخصص، RTL، Mobile First، ودعم `prefers-reduced-motion`.
+
+## ما تتضمنه النسخة
+
+- صفحات رئيسية وخدمات وأخصائيين ودورات وتفاصيل دورة.
+- حجز متعدد الخطوات: الخدمة، طريقة التقديم، المختص، الموعد، ملخص الحالة والمراجعة.
+- ملفات صحية وخطط علاجية وتمارين وسجل تنفيذ ومؤشرات ألم.
+- وحدات ودروس وحضور وتقدم وشهادات وفق شروط الإكمال.
+- لوحات تفاعلية للمصاب والطالب والأخصائي والمدرب والإدارة.
+- مدفوعات واستردادات وتقييمات وإشعارات وملفات وسجل عمليات في مخطط Supabase.
+- صفحات خصوصية وشروط وإلغاء واسترداد وأسئلة شائعة وتواصل.
+
+كل اسم أو موعد أو سعر غير معتمد موسوم صراحة بأنه توضيحي. لا تعرض الواجهة أرقام استخدام أو تقييمات أو مقدمي خدمة بوصفهم حقيقيين دون مصدر واعتماد.
+
+## التشغيل محلياً
 
 ```bash
 npm install
@@ -17,16 +31,34 @@ cp .env.example .env
 npm run dev
 ```
 
-The client runs at `http://localhost:5173`, and the API at `http://localhost:4000`.
+- React: `http://localhost:5173`
+- API: `http://localhost:4000`
+- صحة الخدمة: `http://localhost:4000/api/health`
 
-Create a Supabase project, run `supabase/migrations/001_initial_schema.sql` in its SQL editor, then fill the environment values. Never expose the service-role key in client variables.
+إذا لم تضبط مفاتيح Supabase، تعمل الواجهة ببيانات عرض محلية موسومة ولا تحفظ أي بيانات. بعد ضبط `SUPABASE_URL` و`SUPABASE_PUBLISHABLE_KEY` يقرأ الكتالوج العام من Supabase. تحتاج عمليات الكتابة المحمية إلى `SUPABASE_SERVICE_ROLE_KEY` في خادم Node فقط.
 
-## Current MVP
+## إعداد Supabase
 
-- Responsive Arabic landing experience
-- Specialist and course discovery sections
-- Interactive booking entry point
-- Express health, specialists, and authenticated booking APIs
-- Initial Supabase schema and row-level security policies
+نفذ بالترتيب:
 
-Payment, OTP delivery, video sessions, and production medical/legal workflows require provider credentials and policy decisions before activation.
+1. `supabase/migrations/001_initial_schema.sql`
+2. `supabase/migrations/002_comprehensive_platform.sql`
+
+المخطط النهائي يضم 23 جدولاً وسياسات RLS وتخزيناً خاصاً للملفات الطبية ومواد الدورات. المفتاح القابل للنشر آمن للاستخدام العام مع RLS؛ مفتاح `service_role` سري ولا يضاف إلى الواجهة أو المستودع.
+
+## التحقق
+
+```bash
+npm run build
+npm run lint
+```
+
+## حدود التشغيل الحالية
+
+واجهة النظام ومخطط البيانات جاهزان للاختبار. لا يدعي المشروع تفعيل خدمات خارجية دون مفاتيحها وعقودها. يلزم قبل التحصيل أو استقبال بيانات مرضى فعلية:
+
+- اعتماد موفر رسائل SMS لرموز OTP.
+- اختيار بوابة الدفع وتوقيع Webhook والتحقق من الاسترداد.
+- اعتماد مزود الاجتماعات المرئية.
+- إضافة بيانات الجهة المالكة والفروع والدعم.
+- مراجعة النصوص الطبية والقانونية وسياسة الاحتفاظ.

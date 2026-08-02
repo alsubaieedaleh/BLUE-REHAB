@@ -1,14 +1,122 @@
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import {z} from 'zod';
-import {config} from './config.js';
-import {admin} from './supabase.js';
-const app=express();
-app.use(helmet());app.use(cors({origin:config.CLIENT_URL}));app.use(express.json({limit:'2mb'}));
-app.get('/api/health',(_req,res)=>res.json({status:'ok',service:'blue-rehab-api',database:admin?'connected':'not-configured'}));
-app.get('/api/specialists',async(_req,res,next)=>{try{if(!admin)return res.json({data:[],demo:true});const{data,error}=await admin.from('specialists').select('*, profiles(full_name,avatar_url)').eq('is_verified',true);if(error)throw error;res.json({data});}catch(e){next(e)}});
-const bookingSchema=z.object({specialistId:z.string().uuid(),serviceId:z.string().uuid(),startsAt:z.string().datetime(),mode:z.enum(['remote','clinic']),branchId:z.string().uuid().optional()});
-app.post('/api/bookings',async(req,res,next)=>{try{const body=bookingSchema.parse(req.body);if(!admin)return res.status(503).json({error:'Supabase is not configured'});const token=req.headers.authorization?.replace('Bearer ','');if(!token)return res.status(401).json({error:'Authentication required'});const{data:userData,error:userError}=await admin.auth.getUser(token);if(userError||!userData.user)return res.status(401).json({error:'Invalid session'});const{data,error}=await admin.from('bookings').insert({patient_id:userData.user.id,specialist_id:body.specialistId,service_id:body.serviceId,starts_at:body.startsAt,mode:body.mode,branch_id:body.branchId,status:'pending_payment'}).select().single();if(error)throw error;res.status(201).json({data});}catch(e){next(e)}});
-app.use((err:unknown,_req:express.Request,res:express.Response,_next:express.NextFunction)=>{console.error(err);if(err instanceof z.ZodError)return res.status(400).json({error:'Invalid request',details:err.issues});res.status(500).json({error:'Unexpected server error'})});
-app.listen(config.PORT,()=>console.log(`Blue Rehab API running on http://localhost:${config.PORT}`));
+import cors from "cors";
+import express from "express";
+import helmet from "helmet";
+import { z } from "zod";
+import { previewCatalog, previewCourseDetail } from "./catalog.js";
+import { config } from "./config.js";
+import { admin, catalog } from "./supabase.js";
+
+const app = express();
+app.disable("x-powered-by");
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+app.use(cors({ origin: config.CLIENT_URL, credentials: false }));
+app.use(express.json({ limit: "1mb" }));
+
+app.get("/api/health", (_request, response) => response.json({
+  status: "ok",
+  service: "blue-rehab-api",
+  catalog: catalog ? "supabase" : "preview",
+  protectedWrites: admin ? "configured" : "disabled",
+}));
+
+app.get("/api/catalog", async (_request, response, next) => {
+  try {
+    if (!catalog) return response.json(previewCatalog());
+    const [servicesResult, specialistsResult, coursesResult, branchesResult, slotsResult] = await Promise.all([
+      catalog.from("services").select("id,name,description,duration_minutes,price,allowed_modes,is_demo").eq("is_active", true).order("price"),
+      catalog.from("specialists").select("id,display_name,title,bio,specialties,languages,is_verified,is_demo").order("created_at"),
+      catalog.from("courses").select("id,slug,title,summary,description,duration_hours,price,mode,level,starts_at,learning_outcomes,prerequisites,language,certificate_available,is_demo").eq("is_published", true).order("starts_at"),
+      catalog.from("branches").select("id,name,city,address,is_demo").eq("is_active", true).order("name"),
+      catalog.from("availability_slots").select("id,specialist_id,branch_id,starts_at,ends_at,mode").eq("is_available", true).gt("starts_at", new Date().toISOString()).order("starts_at").limit(12),
+    ]);
+    const error = [servicesResult, specialistsResult, coursesResult, branchesResult, slotsResult].find((result) => result.error)?.error;
+    if (error) throw error;
+
+    return response.json({
+      source: "supabase",
+      services: (servicesResult.data ?? []).map((row) => ({ id: row.id, name: row.name, description: row.description ?? "", durationMinutes: Number(row.duration_minutes), price: Number(row.price), modes: row.allowed_modes, isDemo: row.is_demo })),
+      specialists: (specialistsResult.data ?? []).map((row) => ({ id: row.id, name: row.display_name, title: row.title, bio: row.bio ?? "", specialties: row.specialties, languages: row.languages, isVerified: row.is_verified, isDemo: row.is_demo })),
+      courses: (coursesResult.data ?? []).map((row) => ({ id: row.id, slug: row.slug, title: row.title, summary: row.summary ?? "", description: row.description ?? "", durationHours: Number(row.duration_hours), price: Number(row.price), mode: row.mode, level: row.level, startsAt: row.starts_at, learningOutcomes: row.learning_outcomes, prerequisites: row.prerequisites, language: row.language, certificateAvailable: row.certificate_available, isDemo: row.is_demo })),
+      branches: (branchesResult.data ?? []).map((row) => ({ id: row.id, name: row.name, city: row.city, address: row.address, isDemo: row.is_demo })),
+      availability: (slotsResult.data ?? []).map((row) => ({ id: row.id, specialistId: row.specialist_id, branchId: row.branch_id, startsAt: row.starts_at, endsAt: row.ends_at, mode: row.mode })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/courses/:slug", async (request, response, next) => {
+  try {
+    const slug = z.string().min(2).max(160).parse(request.params.slug);
+    if (!catalog) return response.json(previewCourseDetail(slug));
+    const courseResult = await catalog.from("courses").select("id,slug,title,summary,description,duration_hours,price,mode,level,starts_at,learning_outcomes,prerequisites,language,certificate_available,is_demo").eq("slug", slug).eq("is_published", true).maybeSingle();
+    if (courseResult.error) throw courseResult.error;
+    if (!courseResult.data) return response.status(404).json({ error: "Course not found" });
+
+    const modulesResult = await catalog.from("course_modules").select("id,title,summary,position").eq("course_id", courseResult.data.id).order("position");
+    if (modulesResult.error) throw modulesResult.error;
+    const moduleIds = (modulesResult.data ?? []).map((module) => module.id);
+    const lessonsResult = moduleIds.length
+      ? await catalog.from("course_lessons").select("id,module_id,title,content_type,duration_minutes,is_preview").in("module_id", moduleIds).order("position")
+      : { data: [], error: null };
+    if (lessonsResult.error) throw lessonsResult.error;
+    const row = courseResult.data;
+    return response.json({
+      source: "supabase",
+      course: { id: row.id, slug: row.slug, title: row.title, summary: row.summary ?? "", description: row.description ?? "", durationHours: Number(row.duration_hours), price: Number(row.price), mode: row.mode, level: row.level, startsAt: row.starts_at, learningOutcomes: row.learning_outcomes, prerequisites: row.prerequisites, language: row.language, certificateAvailable: row.certificate_available, isDemo: row.is_demo },
+      modules: (modulesResult.data ?? []).map((module) => ({ id: module.id, title: module.title, summary: module.summary ?? "", position: module.position, lessons: (lessonsResult.data ?? []).filter((lesson) => lesson.module_id === module.id).map((lesson) => ({ id: lesson.id, title: lesson.title, contentType: lesson.content_type, durationMinutes: lesson.duration_minutes, isPreview: lesson.is_preview })) })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const bookingDraftSchema = z.object({
+  serviceId: z.string().uuid(),
+  specialistId: z.string().uuid(),
+  slotId: z.string().uuid(),
+  mode: z.enum(["remote", "clinic"]),
+  notes: z.string().max(800).optional(),
+});
+
+app.post("/api/bookings/drafts", async (request, response, next) => {
+  try {
+    if (!admin) return response.status(503).json({ error: "Protected Supabase writes are not configured" });
+    const token = request.headers.authorization?.replace(/^Bearer\s+/i, "");
+    if (!token) return response.status(401).json({ error: "Authentication required" });
+    const { data: userData, error: userError } = await admin.auth.getUser(token);
+    if (userError || !userData.user) return response.status(401).json({ error: "Invalid session" });
+    const body = bookingDraftSchema.parse(request.body);
+    const [{ data: slot, error: slotError }, { data: service, error: serviceError }] = await Promise.all([
+      admin.from("availability_slots").select("id,specialist_id,branch_id,starts_at,ends_at,mode,is_available").eq("id", body.slotId).single(),
+      admin.from("services").select("id,price,is_active,allowed_modes").eq("id", body.serviceId).single(),
+    ]);
+    if (slotError || serviceError || !slot || !service) return response.status(409).json({ error: "Service or slot is unavailable" });
+    if (!slot.is_available || slot.specialist_id !== body.specialistId || slot.mode !== body.mode || !service.is_active || !service.allowed_modes.includes(body.mode)) return response.status(409).json({ error: "Booking selection is no longer available" });
+    const { data, error } = await admin.from("bookings").insert({
+      patient_id: userData.user.id,
+      specialist_id: body.specialistId,
+      service_id: body.serviceId,
+      branch_id: slot.branch_id,
+      starts_at: slot.starts_at,
+      ends_at: slot.ends_at,
+      mode: body.mode,
+      status: "pending_payment",
+      total: service.price,
+      notes: body.notes ?? null,
+    }).select("id,status,starts_at,total").single();
+    if (error) throw error;
+    return response.status(201).json({ data, next: "payment" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.use((_request, response) => response.status(404).json({ error: "Route not found" }));
+app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
+  if (error instanceof z.ZodError) return response.status(400).json({ error: "Invalid request", details: error.issues });
+  console.error(error);
+  return response.status(500).json({ error: "Unexpected server error" });
+});
+
+app.listen(config.PORT, () => console.log(`Blue Rehab API listening on port ${config.PORT}`));

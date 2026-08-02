@@ -1,23 +1,56 @@
-import {ArrowLeft,BookOpen,CalendarDays,CheckCircle2,HeartPulse,Menu,ShieldCheck,Star,Video,X} from 'lucide-react';
-import {useState} from 'react';
+import { Route, Routes, useParams, useSearchParams } from "react-router-dom";
+import BookingFlow from "./components/BookingFlow";
+import CourseDetail from "./components/CourseDetail";
+import PageShell from "./components/PageShell";
+import PortalExperience from "./components/PortalExperience";
+import AboutPage from "./pages/AboutPage";
+import ContactPage from "./pages/ContactPage";
+import CoursesPage from "./pages/CoursesPage";
+import FaqPage from "./pages/FaqPage";
+import HomePage from "./pages/HomePage";
+import PrivacyPage from "./pages/PrivacyPage";
+import RefundPolicyPage from "./pages/RefundPolicyPage";
+import ServicesPage from "./pages/ServicesPage";
+import SpecialistsPage from "./pages/SpecialistsPage";
+import TermsPage from "./pages/TermsPage";
 
-const specialists=[
- {name:'د. سارة العتيبي',role:'إصابات رياضية وتأهيل',exp:'8 سنوات خبرة',rating:'4.9',slot:'متاحة اليوم',initials:'س ع',tone:'mint'},
- {name:'د. خالد القحطاني',role:'تأهيل العظام والمفاصل',exp:'11 سنة خبرة',rating:'4.8',slot:'غداً 10:00 ص',initials:'خ ق',tone:'blue'},
- {name:'د. ريم الدوسري',role:'العلاج الطبيعي العصبي',exp:'7 سنوات خبرة',rating:'4.9',slot:'اليوم 6:30 م',initials:'ر د',tone:'peach'}];
-const courses=[
- {title:'التأهيل المتقدم لإصابات الركبة',type:'حضوري',hours:'12 ساعة',date:'18 أغسطس',price:'690 ر.س',level:'متوسط',tone:'course-blue',mark:'KNEE'},
- {title:'أساسيات العلاج اليدوي السريري',type:'هجين',hours:'16 ساعة',date:'25 أغسطس',price:'850 ر.س',level:'مبتدئ',tone:'course-green',mark:'MOVE'},
- {title:'قراءة وتحليل الحركة الوظيفية',type:'عن بُعد',hours:'8 ساعات',date:'2 سبتمبر',price:'420 ر.س',level:'متقدم',tone:'course-violet',mark:'MOTION'}];
+function BookingPage() {
+  const [params] = useSearchParams();
+  return <PageShell><section className="booking-page"><div className="container"><header className="booking-page-head"><span className="eyebrow">عرض تشغيلي كامل</span><h1>حجز جلسة علاج طبيعي</h1><p>اختبر اختيار الخدمة وطريقة التقديم والمختص والموعد وملخص الحالة والمراجعة.</p></header><BookingFlow initialService={params.get("service") ?? undefined} initialSpecialist={params.get("specialist") ?? undefined} /></div></section></PageShell>;
+}
 
-function Brand(){return <a className="brand" href="#top"><span className="brand-mark"><HeartPulse/></span><span>بلو <b>ريهاب</b><small>علاج، تأهيل، حياة أفضل</small></span></a>}
-export default function App(){const[menu,setMenu]=useState(false);const[notice,setNotice]=useState('');const book=()=>{setNotice('اختر الموعد المناسب من القائمة — ربط الحجز الفعلي جاهز عند إضافة مفاتيح Supabase.');document.getElementById('booking')?.scrollIntoView({behavior:'smooth'})};return <main>
- <header className="nav-wrap"><nav className="container nav"><Brand/><div className={`nav-links ${menu?'open':''}`}><a href="#services" onClick={()=>setMenu(false)}>الخدمات</a><a href="#specialists" onClick={()=>setMenu(false)}>الأخصائيون</a><a href="#courses" onClick={()=>setMenu(false)}>الدورات</a><a href="#about" onClick={()=>setMenu(false)}>عن المنصة</a></div><div className="nav-actions"><button className="text-button">تسجيل الدخول</button><button className="button button-small" onClick={book}>ابدأ الآن</button><button className="menu-button" onClick={()=>setMenu(!menu)} aria-label="القائمة">{menu?<X/>:<Menu/>}</button></div></nav></header>
- <section className="hero" id="top"><div className="hero-orb orb-one"/><div className="hero-orb orb-two"/><div className="container hero-grid"><div className="hero-copy"><span className="eyebrow"><i/> رعايتك تبدأ من هنا</span><h1>خطوتك الأولى نحو<br/><em>حركة أفضل</em> وحياة أكثر نشاطاً</h1><p>جلسات علاج طبيعي مع أخصائيين معتمدين، وخطط تأهيلية مصممة لحالتك — حضورياً أو عن بُعد.</p><div className="hero-actions"><button className="button" onClick={book}><CalendarDays/> احجز جلستك</button><a className="button button-ghost" href="#courses"><BookOpen/> استعرض الدورات</a></div><div className="trust-row"><div className="avatar-stack"><span>ر</span><span>خ</span><span>س</span></div><div><b>+1,200 مستفيد</b><small><span className="stars">★★★★★</span> 4.9 من 5</small></div></div></div><div className="hero-visual"><div className="floating appointment"><span className="mini-icon"><CalendarDays/></span><div><small>موعدك القادم</small><b>اليوم، 5:30 م</b></div><i/></div><div className="visual-main"><div className="person"><span/><i/><b/><em/></div><div className="visual-caption"><span>خطة مصممة لك</span><strong>تقدمك هذا الأسبوع</strong><div className="progress"><i/></div><small>72% مكتمل</small></div></div><div className="floating rating"><span className="mini-icon warm"><Star/></span><div><b>4.9</b><small>تقييم الأخصائيين</small></div></div></div></div></section>
- <section className="booking-strip" id="booking"><form className="container booking-grid" onSubmit={e=>{e.preventDefault();setNotice('ممتاز! في النسخة التالية ستظهر المواعيد الحقيقية من Supabase.')}}><div className="booking-title"><span className="mini-icon"><CalendarDays/></span><div><b>احجز جلستك الآن</b><small>اختر ما يناسبك وسنتولى الباقي</small></div></div><label><span>نوع الجلسة</span><select><option>تشخيص أولي</option><option>جلسة علاجية</option><option>جلسة متابعة</option></select></label><label><span>طريقة الجلسة</span><select><option>في المركز</option><option>عن بُعد</option></select></label><button className="button">عرض المواعيد <ArrowLeft/></button>{notice&&<div className="notice"><CheckCircle2/>{notice}<button type="button" onClick={()=>setNotice('')}><X/></button></div>}</form></section>
- <section className="section" id="services"><div className="container"><header className="section-head centered"><span className="kicker">كيف نساعدك؟</span><h2>رعاية متكاملة في كل خطوة</h2><p>من التشخيص الأول حتى استعادة نشاطك، نرافقك بخطة واضحة ومتابعة مستمرة.</p></header><div className="service-grid">{[{icon:<HeartPulse/>,n:'01',title:'تشخيص دقيق',text:'تقييم شامل لحالتك وتحديد مسببات الألم على يد أخصائي معتمد.'},{icon:<CalendarDays/>,n:'02',title:'خطة علاج شخصية',text:'برنامج علاجي وتمارين منزلية مصممة خصيصاً لأهدافك وحالتك.'},{icon:<Video/>,n:'03',title:'متابعة مستمرة',text:'تابع تقدمك والتزامك واحصل على توجيهات أخصائيك أينما كنت.'}].map((s,i)=><article className={`service-card ${i===1?'featured':''}`} key={s.n}><span className="service-icon">{s.icon}</span><span className="num">{s.n}</span><h3>{s.title}</h3><p>{s.text}</p><button onClick={book}>اعرف المزيد <ArrowLeft/></button></article>)}</div></div></section>
- <section className="section soft" id="specialists"><div className="container"><header className="section-head split"><div><span className="kicker">فريقنا الطبي</span><h2>أخصائيون يفهمون احتياجك</h2></div><a className="outline-link" href="#specialists">عرض جميع الأخصائيين <ArrowLeft/></a></header><div className="specialists-grid">{specialists.map(s=><article className="specialist-card" key={s.name}><div className={`specialist-photo ${s.tone}`}><span>{s.initials}</span><i>معتمد</i></div><div className="specialist-body"><div className="rating-line"><span>★ {s.rating}</span><small>(105 تقييم)</small></div><h3>{s.name}</h3><p>{s.role}</p><div className="meta"><span>{s.exp}</span><span className="available">● {s.slot}</span></div><button className="card-button" onClick={book}>عرض الملف والحجز</button></div></article>)}</div></div></section>
- <section className="section" id="courses"><div className="container"><header className="section-head split"><div><span className="kicker">تعلّم وطور مهاراتك</span><h2>دورات تأهيلية للممارسين والطلاب</h2><p>خبرة عملية يقدمها مختصون، لتأخذ معرفتك من القاعة إلى الممارسة.</p></div><a className="outline-link" href="#courses">كل الدورات <ArrowLeft/></a></header><div className="courses-grid">{courses.map(c=><article className="course-card" key={c.title}><div className={`course-cover ${c.tone}`}><span className="course-tag">{c.type}</span><span className="course-symbol">{c.mark}</span></div><div className="course-body"><div className="course-level">{c.level}</div><h3>{c.title}</h3><div className="course-meta"><span>◷ {c.hours}</span><span>◫ {c.date}</span></div><hr/><div className="course-footer"><strong>{c.price}</strong><button onClick={()=>setNotice('سيفتح التسجيل بعد ربط حساب Supabase وبوابة الدفع.')} >تفاصيل الدورة <ArrowLeft/></button></div></div></article>)}</div></div></section>
- <section className="cta-section" id="about"><div className="container cta"><div><span className="eyebrow light"><ShieldCheck/> رعاية موثوقة وآمنة</span><h2>جاهز تبدأ رحلة التعافي؟</h2><p>احجز موعدك الأول، ودع فريقنا يساعدك في العودة لما تحب.</p></div><div className="cta-actions"><button className="button button-white" onClick={book}>احجز جلسة الآن</button><a className="phone" href="tel:920000000"><small>تحتاج مساعدة؟</small><b dir="ltr">9200 00000</b></a></div></div></section>
- <footer><div className="container footer-grid"><div><Brand/><p>منصة سعودية تجمع العلاج الطبيعي والتأهيل المهني في تجربة واحدة موثوقة.</p></div><div><b>المنصة</b><a href="#services">الخدمات</a><a href="#specialists">الأخصائيون</a><a href="#courses">الدورات</a></div><div><b>الدعم</b><a href="#">الأسئلة الشائعة</a><a href="#">سياسة الإلغاء</a><a href="#">تواصل معنا</a></div><div><b>الخصوصية أولاً</b><p>حماية بياناتك الصحية جزء أساسي من تصميمنا.</p></div></div><div className="container copyright"><span>© 2026 بلو ريهاب. جميع الحقوق محفوظة.</span><span>سياسة الخصوصية · الشروط والأحكام</span></div></footer>
- </main>}
+function CoursePage() {
+  const { slug = "advanced-knee-rehab" } = useParams();
+  return <PageShell><CourseDetail slug={slug} /></PageShell>;
+}
+
+function PortalPage() {
+  const [params] = useSearchParams();
+  const requested = params.get("view");
+  const allowed = new Set(["patient", "student", "specialist", "trainer", "admin"]);
+  const initialView = allowed.has(requested ?? "") ? requested as "patient" | "student" | "specialist" | "trainer" | "admin" : "patient";
+  return <PortalExperience displayName="المستخدم التجريبي" initialView={initialView} />;
+}
+
+function NotFoundPage() {
+  return <PageShell><section className="section"><div className="container catalog-message"><strong>الصفحة غير موجودة.</strong><p>تحقق من الرابط أو عد إلى الصفحة الرئيسية.</p><a className="button" href="/">العودة للرئيسية</a></div></section></PageShell>;
+}
+
+export default function App() {
+  return <Routes>
+    <Route path="/" element={<HomePage />} />
+    <Route path="/services" element={<ServicesPage />} />
+    <Route path="/specialists" element={<SpecialistsPage />} />
+    <Route path="/courses" element={<CoursesPage />} />
+    <Route path="/courses/:slug" element={<CoursePage />} />
+    <Route path="/booking" element={<BookingPage />} />
+    <Route path="/portal" element={<PortalPage />} />
+    <Route path="/about" element={<AboutPage />} />
+    <Route path="/faq" element={<FaqPage />} />
+    <Route path="/contact" element={<ContactPage />} />
+    <Route path="/privacy" element={<PrivacyPage />} />
+    <Route path="/terms" element={<TermsPage />} />
+    <Route path="/refund-policy" element={<RefundPolicyPage />} />
+    <Route path="*" element={<NotFoundPage />} />
+  </Routes>;
+}
